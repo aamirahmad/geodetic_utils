@@ -19,8 +19,10 @@ bool g_publish_pose;
 
 geodetic_converter::GeodeticConverter g_geodetic_converter;
 sensor_msgs::Imu g_latest_imu_msg;
+sensor_msgs::Imu g_latest_gimbal_msg;
 std_msgs::Float64 g_latest_altitude_msg;
 bool g_got_imu;
+bool g_got_gimbal;
 bool g_got_altitude;
 
 ros::Publisher g_gps_pose_pub;
@@ -45,6 +47,12 @@ void imu_callback(const sensor_msgs::ImuConstPtr& msg)
   g_got_imu = true;
 }
 
+void gimbal_callback(const sensor_msgs::ImuConstPtr& msg)
+{
+  g_latest_gimbal_msg = *msg;
+  g_got_gimbal = true;
+}
+
 void altitude_callback(const std_msgs::Float64ConstPtr& msg)
 {
   // Only the z value in the PointStamped message is used
@@ -56,9 +64,15 @@ void gps_callback(const sensor_msgs::NavSatFixConstPtr& msg)
 {
   if (!g_got_imu) {
     ROS_WARN_STREAM_THROTTLE(1, "No IMU data yet");
-    return;
+    //return;
   }
 
+  if (!g_got_gimbal) {
+    ROS_WARN_STREAM_THROTTLE(1, "No Gimbal data yet");
+    //return;
+  }
+  
+  
   if (msg->status.status < sensor_msgs::NavSatStatus::STATUS_FIX) {
     ROS_WARN_STREAM_THROTTLE(1, "No GPS fix");
     return;
@@ -161,9 +175,23 @@ void gps_callback(const sensor_msgs::NavSatFixConstPtr& msg)
                                        g_latest_imu_msg.orientation.z,
                                        g_latest_imu_msg.orientation.w));
   p_tf_broadcaster->sendTransform(tf::StampedTransform(transform,
-                                                       ros::Time::now(),
+                                                       msg->header.stamp,
                                                        g_frame_id,
                                                        g_tf_child_frame_id));
+  
+  
+  ////  Actual transform may not be required because we directly get the world frame orientation of the gimbal in yaw.
+  
+  tf::Transform transform1;
+  transform1.setOrigin(tf::Vector3(0.1, 0, 0));
+  transform1.setRotation(tf::Quaternion(g_latest_gimbal_msg.orientation.x,
+                                       g_latest_gimbal_msg.orientation.y,
+                                       g_latest_gimbal_msg.orientation.z,
+                                       g_latest_gimbal_msg.orientation.w));
+  p_tf_broadcaster->sendTransform(tf::StampedTransform(transform1,
+                                                       msg->header.stamp,
+                                                       g_tf_child_frame_id,
+                                                       "camera_frame"));
 }
 
 int main(int argc, char **argv) {
@@ -172,6 +200,7 @@ int main(int argc, char **argv) {
   ros::NodeHandle pnh("~");
 
   g_got_imu = false;
+  g_got_gimbal = false;
   g_got_altitude = false;
   p_tf_broadcaster = std::make_shared<tf::TransformBroadcaster>();
 
@@ -205,7 +234,7 @@ int main(int argc, char **argv) {
                                  g_tf_child_frame_id, "gps_receiver");
 
   // Specify whether to publish pose or not
-  ros::param::param("~publish_pose", g_publish_pose, false);
+  ros::param::param("~publish_pose", g_publish_pose, true);
 
   // Wait until GPS reference parameters are initialized.
   double latitude, longitude, altitude;
@@ -238,8 +267,9 @@ int main(int argc, char **argv) {
       nh.advertise<geometry_msgs::PointStamped>("gps_position", 1);
 
   // Subscribe to IMU and GPS fixes, and convert in GPS callback
-  ros::Subscriber imu_sub = nh.subscribe("imu", 1, &imu_callback);
-  ros::Subscriber gps_sub = nh.subscribe("gps", 1, &gps_callback);
+  ros::Subscriber gimbal_sub = nh.subscribe("/spark_red/gimbal/Orientation", 1, &gimbal_callback);    
+  ros::Subscriber imu_sub = nh.subscribe("/spark_red/Orientation", 1, &imu_callback);
+  ros::Subscriber gps_sub = nh.subscribe("/spark_red/gpsPose", 1, &gps_callback);
   ros::Subscriber altitude_sub =
      nh.subscribe("external_altitude", 1, &altitude_callback);
 
