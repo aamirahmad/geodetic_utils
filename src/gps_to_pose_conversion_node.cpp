@@ -93,6 +93,14 @@ void gps_callback(const sensor_msgs::NavSatFixConstPtr& msg)
     y = -aux;
     //z = z;
   }
+  
+  // (ENU -> NED) for simulation
+  
+    double aux = x;
+    x = y;
+    y = aux;
+    //z = z;
+    
 
   // Fill up pose message
   geometry_msgs::PoseWithCovarianceStampedPtr pose_msg(
@@ -191,7 +199,30 @@ void gps_callback(const sensor_msgs::NavSatFixConstPtr& msg)
   p_tf_broadcaster->sendTransform(tf::StampedTransform(transform1,
                                                        msg->header.stamp,
                                                        g_tf_child_frame_id,
-                                                       "camera_frame"));
+                                                       "dji_spark_red_camera"));
+  
+    
+    tf::Transform transformCam;
+    transformCam.setOrigin(tf::Vector3(0.1, 0, 0));
+    transformCam.setRotation(tf::Quaternion(0,0,0,1));
+    p_tf_broadcaster->sendTransform(tf::StampedTransform(transformCam,msg->header.stamp,g_tf_child_frame_id,"spark_camera"));
+  
+    tf::Transform transformObs;
+    transformObs.setOrigin(tf::Vector3(0, 0, 0));
+    transformObs.setRotation(tf::Quaternion(0,0,0,1));
+    p_tf_broadcaster->sendTransform(tf::StampedTransform(transformObs,msg->header.stamp,"world","Obstacle1"));
+    
+
+    transformObs.setOrigin(tf::Vector3(9, -4, 0));
+    transformObs.setRotation(tf::Quaternion(0,0,0,1));
+    p_tf_broadcaster->sendTransform(tf::StampedTransform(transformObs,msg->header.stamp,"world","Obstacle2"));
+
+
+
+    transformObs.setOrigin(tf::Vector3(9, 4, 0));
+    transformObs.setRotation(tf::Quaternion(0,0,0,1));
+    p_tf_broadcaster->sendTransform(tf::StampedTransform(transformObs,msg->header.stamp,"world","Obstacle3"));    
+    
 }
 
 int main(int argc, char **argv) {
@@ -231,7 +262,7 @@ int main(int argc, char **argv) {
   ros::param::param<std::string>("~frame_id",
                                  g_frame_id, "world");
   ros::param::param<std::string>("~tf_child_frame_id",
-                                 g_tf_child_frame_id, "gps_receiver");
+                                 g_tf_child_frame_id, "dji_spark_red_gps_receiver");
 
   // Specify whether to publish pose or not
   ros::param::param("~publish_pose", g_publish_pose, true);
@@ -260,16 +291,16 @@ int main(int argc, char **argv) {
 
   // Initialize publishers
   g_gps_pose_pub =
-      nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("gps_pose", 1);
+      nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/dji_spark_red/pose", 1);
   g_gps_transform_pub =
-      nh.advertise<geometry_msgs::TransformStamped>("gps_transform", 1);
+      nh.advertise<geometry_msgs::TransformStamped>("/dji_spark_red/gps_transform", 1);
   g_gps_position_pub =
-      nh.advertise<geometry_msgs::PointStamped>("gps_position", 1);
+      nh.advertise<geometry_msgs::PointStamped>("/dji_spark_red/position", 1);
 
   // Subscribe to IMU and GPS fixes, and convert in GPS callback
-  ros::Subscriber gimbal_sub = nh.subscribe("/spark_red/gimbal/Orientation", 1, &gimbal_callback);    
-  ros::Subscriber imu_sub = nh.subscribe("/spark_red/Orientation", 1, &imu_callback);
-  ros::Subscriber gps_sub = nh.subscribe("/spark_red/gpsPose", 1, &gps_callback);
+  ros::Subscriber gimbal_sub = nh.subscribe("/dji_spark_red/gimbal/Orientation", 1, &gimbal_callback);    
+  ros::Subscriber imu_sub = nh.subscribe("/dji_spark_red/Orientation", 1, &imu_callback);
+  ros::Subscriber gps_sub = nh.subscribe("/dji_spark_red/gpsPose", 1, &gps_callback);
   ros::Subscriber altitude_sub =
      nh.subscribe("external_altitude", 1, &altitude_callback);
 
